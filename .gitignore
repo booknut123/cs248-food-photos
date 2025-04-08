@@ -1,0 +1,9 @@
+# Google API credentials and token files
+credentials.json
+token.json
+
+# Virtual environment folder
+.venv/
+
+# Streamlit config file
+config.toml
