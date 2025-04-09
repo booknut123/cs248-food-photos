@@ -19,25 +19,33 @@ SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 # Authenticate and create the API client
 def authenticate():
     creds = None
-    # The file token.json stores the user's access and refresh tokens, and is created automatically when the
-    # authorization flow completes for the first time.
-    if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-    # If there are no (valid) credentials available, let the user log in.
+    # Check if token exists in secrets (optional)
+    if 'google_token' in st.secrets:
+        creds = Credentials.from_authorized_user_info(st.secrets['google_token'], SCOPES)
+    
+    # If no valid credentials, authenticate
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                'credentials.json', SCOPES)  # credentials.json from Google Developer Console
+            # Create client config from secrets
+            client_config = {
+                "web": {
+                    "client_id": st.secrets["google_oauth"]["client_id"],
+                    "client_secret": st.secrets["google_oauth"]["client_secret"],
+                    "project_id": st.secrets["google_oauth"]["project_id"],
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": st.secrets["google_oauth"]["token_uri"],
+                    "auth_provider_x509_cert_url": st.secrets["google_oauth"]["auth_provider_x509_cert_url"],
+                    "redirect_uris": st.secrets["google_oauth"]["redirect_uris"]
+                }
+            }
+            
+            flow = InstalledAppFlow.from_client_config(
+                client_config, SCOPES)
             creds = flow.run_local_server(port=0)
-        # Save the credentials for the next run
-        with open('token.json', 'w') as token:
-            token.write(creds.to_json())
-
-    # Build the service to interact with Google Drive API
-    service = build('drive', 'v3', credentials=creds)
-    return service
+    
+    return build('drive', 'v3', credentials=creds)
 
 # === MY CODE ===
 def get_files(folder_id, image_name, service):

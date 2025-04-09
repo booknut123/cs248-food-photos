@@ -7,3 +7,4 @@ token.json
 
 # Streamlit config file
 config.toml
+.streamlit/secrets.toml
