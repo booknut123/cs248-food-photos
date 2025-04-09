@@ -1,9 +1,11 @@
 # Google API credentials and token files
 credentials.json
 token.json
+cs248-food-photos-spring25-0cea6f151314.json
 
 # Virtual environment folder
 .venv/
 
-# Streamlit config file
+# Streamlit
 config.toml
+.streamlit/secrets.toml

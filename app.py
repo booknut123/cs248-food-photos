@@ -8,36 +8,46 @@ import pandas as pd
 import json
 
 # === FROM CHATGPT ===
-import os
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
-# If modifying scopes, delete the token.json file.
+from google.auth.transport.requests import Request
+
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 
-# Authenticate and create the API client
 def authenticate():
     creds = None
-    # The file token.json stores the user's access and refresh tokens, and is created automatically when the
-    # authorization flow completes for the first time.
-    if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-    # If there are no (valid) credentials available, let the user log in.
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                'credentials.json', SCOPES)  # credentials.json from Google Developer Console
-            creds = flow.run_local_server(port=0)
-        # Save the credentials for the next run
-        with open('token.json', 'w') as token:
-            token.write(creds.to_json())
-
-    # Build the service to interact with Google Drive API
-    service = build('drive', 'v3', credentials=creds)
-    return service
+    
+    # Option 1: Use pre-generated token (for Streamlit Cloud)
+    if 'google_token' in st.secrets:
+        creds = Credentials.from_authorized_user_info(
+            info={
+                "token": st.secrets["google_token"]["token"],
+                "refresh_token": st.secrets["google_token"]["refresh_token"],
+                "token_uri": st.secrets["google_token"]["token_uri"],
+                "client_id": st.secrets["google_token"]["client_id"],
+                "client_secret": st.secrets["google_token"]["client_secret"],
+                "scopes": SCOPES
+            },
+            scopes=SCOPES
+        )
+    
+    # Option 2: Fallback to Service Account (more reliable)
+    elif 'google_service_account' in st.secrets:
+        creds = service_account.Credentials.from_service_account_info(
+            st.secrets["google_service_account"],
+            scopes=SCOPES
+        )
+    
+    # Check if credentials are valid/expired
+    if creds and creds.expired and creds.refresh_token:
+        creds.refresh(Request())  # Auto-refresh if possible
+    
+    if not creds:
+        st.error("🚨 Google Drive authentication failed. Check your secrets.")
+        return None
+    
+    return build('drive', 'v3', credentials=creds)
 
 # === MY CODE ===
 def get_files(folder_id, image_name, service):
