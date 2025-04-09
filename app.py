@@ -8,42 +8,44 @@ import pandas as pd
 import json
 
 # === FROM CHATGPT ===
-import os
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
-# If modifying scopes, delete the token.json file.
+from google.auth.transport.requests import Request
+
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 
-# Authenticate and create the API client
 def authenticate():
     creds = None
-    # Check if token exists in secrets (optional)
-    if 'google_token' in st.secrets:
-        creds = Credentials.from_authorized_user_info(st.secrets['google_token'], SCOPES)
     
-    # If no valid credentials, authenticate
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            # Create client config from secrets
-            client_config = {
-                "web": {
-                    "client_id": st.secrets["google_oauth"]["client_id"],
-                    "client_secret": st.secrets["google_oauth"]["client_secret"],
-                    "project_id": st.secrets["google_oauth"]["project_id"],
-                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                    "token_uri": st.secrets["google_oauth"]["token_uri"],
-                    "auth_provider_x509_cert_url": st.secrets["google_oauth"]["auth_provider_x509_cert_url"],
-                    "redirect_uris": st.secrets["google_oauth"]["redirect_uris"]
-                }
-            }
-            
-            flow = InstalledAppFlow.from_client_config(
-                client_config, SCOPES)
-            creds = flow.run_local_server(port=0)
+    # Option 1: Use pre-generated token (for Streamlit Cloud)
+    if 'google_token' in st.secrets:
+        creds = Credentials.from_authorized_user_info(
+            info={
+                "token": st.secrets["google_token"]["token"],
+                "refresh_token": st.secrets["google_token"]["refresh_token"],
+                "token_uri": st.secrets["google_token"]["token_uri"],
+                "client_id": st.secrets["google_token"]["client_id"],
+                "client_secret": st.secrets["google_token"]["client_secret"],
+                "scopes": SCOPES
+            },
+            scopes=SCOPES
+        )
+    
+    # Option 2: Fallback to Service Account (more reliable)
+    elif 'google_service_account' in st.secrets:
+        creds = service_account.Credentials.from_service_account_info(
+            st.secrets["google_service_account"],
+            scopes=SCOPES
+        )
+    
+    # Check if credentials are valid/expired
+    if creds and creds.expired and creds.refresh_token:
+        creds.refresh(Request())  # Auto-refresh if possible
+    
+    if not creds:
+        st.error("🚨 Google Drive authentication failed. Check your secrets.")
+        return None
     
     return build('drive', 'v3', credentials=creds)
 
