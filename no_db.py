@@ -7,9 +7,6 @@ from datetime import date, datetime, timedelta
 import pandas as pd
 import json
 
-IMAGE_WIDTH = 100  # Fixed width for thumbnails
-IMAGE_QUALITY = 50  # Reduce quality for faster loading
-
 # === FROM CHATGPT ===
 from google.oauth2.credentials import Credentials
 from google.oauth2 import service_account
@@ -53,37 +50,32 @@ def authenticate():
     return build('drive', 'v3', credentials=creds)
 
 # === MY CODE ===
-@st.cache_data
-def get_file_mapping(folder_id, _service):
-    # ChatGPT again when working with service
-    results = _service.files().list(
-        q=f"'{folder_id}' in parents and trashed = false",
-        fields="files(id, name)"
-    ).execute()
+def get_files(folder_id, image_name, service):
+    
+    # ChatGPT again
+    results = service.files().list(q=f"'{folder_id}' in parents and trashed = false",
+                                   fields="files(id, name)").execute()
     files = results.get('files', [])
-    return {file['name'].split('.')[0]: file['id'] for file in files}
+    return files
 
 @st.cache_data
-def get_images(file_mapping, image_name):
-    if not file_mapping:
+def get_images(files, image_name):
+    if not files:
         st.write('No files found in the folder.')
         return "No image found."
-    
-    file_id = file_mapping.get(image_name)
-    if not file_id:
-        return "Image not found."
-    
-    # Generate the direct image URL
-    image_url = f"https://drive.google.com/uc?export=view&id={file_id}"
-    thumbnail_url = f"{image_url}&w={IMAGE_WIDTH}&q={IMAGE_QUALITY}"
-    response = requests.get(thumbnail_url)
-
-    if response.status_code == 200:
-        image = Image.open(BytesIO(response.content))
-        #image.thumbnail((IMAGE_WIDTH, IMAGE_WIDTH))
-        st.image(image, caption="")
     else:
-        return f"Failed to load image. Error: {response.status_code}"
+        for file in files:
+            if file['name'].split('.')[0] == image_name:
+                file_id = file['id']
+                # Generate the direct image URL
+                image_url = f"https://drive.google.com/uc?export=view&id={file_id}"
+                response = requests.get(image_url)
+    
+                if response.status_code == 200:
+                    image = Image.open(BytesIO(response.content)) # StackOverflow - https://stackoverflow.com/questions/7391945/how-do-i-read-image-data-from-a-url-in-python
+                    st.image(image, caption="");
+                else:
+                    return f"Failed to load image. Error: {response.status_code}"
 
 def getMenuJSON(locationID, mealID, d):
     base_url = "https://dish.avifoodsystems.com/api/menu-items/week"
@@ -94,24 +86,24 @@ def getMenuJSON(locationID, mealID, d):
     except:
         return
 
-# def staticDF(data, date): #print as dataframe, includes name, category, desc
-#     if data == None:
-#         st.toast("We're sorry, but something went wrong.")
+def staticDF(data, date): #print as dataframe, includes name, category, desc
+    if data == None:
+        st.toast("We're sorry, but something went wrong.")
     
-#     df = pd.DataFrame(data)
-#     try:
-#         df['date'] = df['date'].apply(lambda x: x.split('T')[0])
-#         df = df[df['date']== str(date)]
-#         df2 = pd.DataFrame(
-#             {"name": df["name"],
-#              "station": df["categoryName"], 
-#              "description": df["description"]
-#             })
-#         dataframe = st.dataframe(df2, hide_index=True)
-#         return dataframe
-#     except:
-#         st.toast("We're sorry, but something went wrong.")
-#         return
+    df = pd.DataFrame(data)
+    try:
+        df['date'] = df['date'].apply(lambda x: x.split('T')[0])
+        df = df[df['date']== str(date)]
+        df2 = pd.DataFrame(
+            {"name": df["name"],
+             "station": df["categoryName"], 
+             "description": df["description"]
+            })
+        dataframe = st.dataframe(df2, hide_index=True)
+        return dataframe
+    except:
+        st.toast("We're sorry, but something went wrong.")
+        return
     
 def dynamicDF(data, date, folder_id, service): #print as columns w/ add buttons, includes name, calories, category
     if data == None:
@@ -129,9 +121,6 @@ def dynamicDF(data, date, folder_id, service): #print as columns w/ add buttons,
     except:
         return st.toast("We're sorry, but something went wrong.")
     
-    # Get file mapping once at the beginning
-    file_mapping = get_file_mapping(folder_id, service)
-    
     col0, col1, col2, col3, col4 = st.columns(5, vertical_alignment="top")
     col0.write("")
     col1.write("**Dish**")
@@ -141,24 +130,24 @@ def dynamicDF(data, date, folder_id, service): #print as columns w/ add buttons,
     for index, row in df2.iterrows():
         col0, col1, col2, col3, col4 = st.columns(5, vertical_alignment="top")
         with col0:
-            get_images(file_mapping, row["name"])
+            get_images(get_files(folder_id, row["name"], service), row["name"])
         col1.write(row["name"])
         col2.write(pd.json_normalize(row["nutrition"])["calories"][0])
         col3.write(row["station"])
         col4.button("Add", key=index)
       
 def create_streamlit():
-    # Google Drive folder ID: https://drive.google.com/drive/folders/1HTkwWKrBXl1Rhi7aWOwCJna3-jJy28S9
+    # Google Drive folder ID from your URL: https://drive.google.com/drive/folders/1HTkwWKrBXl1Rhi7aWOwCJna3-jJy28S9
     folder_id = '1HTkwWKrBXl1Rhi7aWOwCJna3-jJy28S9'
     image_name = ''  # Image name you are searching for
     
     service = authenticate()  # Authenticate and build the service
     
     mealDict = {
-        "Bates": {"Breakfast": 145, "Lunch": 146, "Dinner": 311, "LocationID": 95},
-        "Lulu": {"Breakfast": 148, "Lunch": 149, "Dinner": 312, "LocationID": 96},
-        "Tower": {"Breakfast": 153, "Lunch": 154, "Dinner": 310, "LocationID": 97},
-        "StoneD":{"Breakfast": 261, "Lunch": 262, "Dinner": 263, "LocationID": 131}
+    "Bates": {"Breakfast": 145, "Lunch": 146, "Dinner": 311, "LocationID": 95},
+    "Lulu": {"Breakfast": 148, "Lunch": 149, "Dinner": 312, "LocationID": 96},
+    "Tower": {"Breakfast": 153, "Lunch": 154, "Dinner": 310, "LocationID": 97},
+    "StoneD":{"Breakfast": 261, "Lunch": 262, "Dinner": 263, "LocationID": 131}
     }
 
     # location and meal columns
@@ -191,9 +180,10 @@ def create_streamlit():
 def main():    
     st.set_page_config(page_title="WF Streamlit", layout="wide")
 
-    st.header("cs248-food-photos")
+    st.header("Milestone 1")
     st.subheader(f"Today: {date.today()}")
     
+    # image_url = get_image(folder_id, image_name, service)
     create_streamlit()
 
 if __name__ == '__main__':
